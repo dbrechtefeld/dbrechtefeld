@@ -1,0 +1,946 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Strategy Analysis Workbench</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: sticky tab bar over a single working column; each analysis is one view, the overview summarises them all. */
+:root {
+  --bg: #eef1f0; --surface: #ffffff; --sunk: #e4e9e7; --ink: #16201e; --muted: #5a6764; --line: #cfd8d5;
+  --accent: #2f43b8; --accent-ink: #ffffff; --accent-soft: #e2e6fa;
+  --ok: #2b7a4b; --warn: #9a6512; --high: #b34d14; --crit: #b3261e;
+  --ok-bg: #d9eee1; --warn-bg: #f6e8c8; --high-bg: #f8dbc9; --crit-bg: #f6d1ce;
+  --q-o: #1d679d; --q-o-bg: #d8e8f4;
+  --f-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r: 6px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #101615; --surface: #18201f; --sunk: #0c1110; --ink: #e4ebe9; --muted: #97a6a2; --line: #2b3634;
+  --accent: #93a1ff; --accent-ink: #0e1330; --accent-soft: #232a52;
+  --ok: #6cc58f; --warn: #e3b45a; --high: #f08a52; --crit: #f47a70;
+  --ok-bg: #173225; --warn-bg: #3a2d12; --high-bg: #3f2413; --crit-bg: #421c1a;
+  --q-o: #6fb3e6; --q-o-bg: #15293a; color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #101615; --surface: #18201f; --sunk: #0c1110; --ink: #e4ebe9; --muted: #97a6a2; --line: #2b3634;
+  --accent: #93a1ff; --accent-ink: #0e1330; --accent-soft: #232a52;
+  --ok: #6cc58f; --warn: #e3b45a; --high: #f08a52; --crit: #f47a70;
+  --ok-bg: #173225; --warn-bg: #3a2d12; --high-bg: #3f2413; --crit-bg: #421c1a;
+  --q-o: #6fb3e6; --q-o-bg: #15293a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.5 var(--f-body); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h2 { font-size: 1.6rem; font-weight: 700; }
+h3 { font-size: 1.08rem; font-weight: 700; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.mono, .num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.eyebrow { font: 500 .72rem/1 var(--f-mono); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+
+/* Header + tabs */
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-block: 14px 8px; }
+.brand h1 { font-size: 1.25rem; font-weight: 700; letter-spacing: -.01em; }
+.brand h1 span { color: var(--accent); }
+.brand .proj { color: var(--muted); font-size: .9rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+nav.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+nav.tabs::-webkit-scrollbar { display: none; }
+nav.tabs button { flex: none; background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 12px 10px; font: 500 .9rem var(--f-body); color: var(--muted); cursor: pointer; }
+nav.tabs button:hover { color: var(--ink); }
+nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+nav.tabs .code { font-family: var(--f-mono); font-size: .72rem; color: var(--accent); margin-right: 5px; }
+
+main { padding-block: 24px 64px; }
+.view-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+.view-head p { max-width: 64ch; margin-top: 6px; color: var(--muted); }
+.stack { display: grid; gap: 20px; }
+
+/* Controls */
+button, .btn { font: 500 .85rem var(--f-body); }
+.btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 6px 12px; border-radius: var(--r); cursor: pointer; white-space: nowrap; text-decoration: none; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.ghost { border-color: transparent; background: transparent; color: var(--muted); padding: 4px 8px; }
+.btn.ghost:hover { color: var(--ink); border-color: var(--line); }
+.btn.danger[data-armed] { background: var(--crit); border-color: var(--crit); color: var(--surface); }
+.btn.sm { padding: 3px 8px; font-size: .78rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+input[type=text], input:not([type]), textarea, select { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 6px 8px; width: 100%; min-width: 0; }
+textarea { resize: vertical; min-height: 34px; }
+select { padding-right: 4px; cursor: pointer; }
+input.title { font-weight: 600; border-color: transparent; background: transparent; padding-inline: 4px; }
+input.title:hover, input.title:focus { border-color: var(--line); background: var(--surface); }
+input.note { font-size: .85rem; color: var(--muted); border-color: transparent; background: transparent; padding: 2px 4px; }
+input.note:hover, input.note:focus { border-color: var(--line); background: var(--surface); color: var(--ink); }
+label.f { display: grid; gap: 3px; min-width: 0; }
+label.f > span { font: 500 .68rem/1 var(--f-mono); text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+
+/* Panels */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 18px; min-width: 0; }
+.panel > h3 + * { margin-top: 12px; }
+.panel-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+
+/* Chips & rating pills */
+.chip { display: inline-flex; align-items: center; gap: 4px; font: 500 .74rem/1 var(--f-mono); padding: 4px 7px; border-radius: 4px; white-space: nowrap; background: var(--sunk); color: var(--muted); }
+.b-low { background: var(--ok-bg); color: var(--ok); }
+.b-med { background: var(--warn-bg); color: var(--warn); }
+.b-high { background: var(--high-bg); color: var(--high); }
+.b-crit { background: var(--crit-bg); color: var(--crit); }
+.score { min-width: 76px; justify-content: center; }
+
+/* KPI tiles */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; display: grid; gap: 4px; }
+.kpi .v { font: 700 1.9rem/1.1 var(--f-display); font-variant-numeric: tabular-nums; }
+.kpi .s { font-size: .82rem; color: var(--muted); }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 20px; }
+
+/* Bars */
+.bars { display: grid; gap: 10px; }
+.bar-row { display: grid; grid-template-columns: 110px 1fr 54px; gap: 10px; align-items: center; font-size: .86rem; }
+.bar-track { height: 10px; background: var(--sunk); border-radius: 3px; overflow: hidden; }
+.bar-fill { height: 100%; background: var(--accent); border-radius: 3px; }
+.bar-row .num { text-align: right; color: var(--muted); }
+
+/* Heat map */
+.heat-wrap { overflow-x: auto; }
+.heat { display: grid; grid-template-columns: 92px repeat(5, minmax(46px, 1fr)); gap: 3px; min-width: 330px; }
+.heat .ax { font: 500 .68rem/1.2 var(--f-mono); color: var(--muted); display: flex; align-items: center; }
+.heat .ax.col { justify-content: center; text-align: center; padding-top: 4px; }
+.heat .cell { aspect-ratio: 1.5; max-width: 100%; border-radius: 4px; display: flex; align-items: center; justify-content: center; font: 600 .95rem var(--f-mono); position: relative; }
+.heat .cell .p { position: absolute; top: 3px; left: 5px; font-size: .62rem; font-weight: 400; opacity: .7; }
+.heat .cell.empty { color: transparent; }
+.heat .cell.empty .p { color: var(--muted); }
+.heat-caption { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-top: 10px; font-size: .8rem; color: var(--muted); }
+.legend { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* Lists of items */
+.items { display: grid; gap: 8px; }
+.item { background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--line); border-radius: var(--r); padding: 10px 12px; display: grid; gap: 8px; min-width: 0; }
+.item.s-low { border-left-color: var(--ok); }
+.item.s-med { border-left-color: var(--warn); }
+.item.s-high { border-left-color: var(--high); }
+.item.s-crit { border-left-color: var(--crit); }
+.item-top { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: start; }
+.item-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.item-actions { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.empty-state { padding: 16px; border: 1px dashed var(--line); border-radius: var(--r); color: var(--muted); font-size: .88rem; }
+
+/* PEST */
+.pest-group { display: grid; gap: 10px; }
+.pest-group .gh { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.letter { font: 700 1.6rem/1 var(--f-display); color: var(--accent); width: 1.2em; }
+
+/* SWOT */
+.swot { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.quad { border-radius: 8px; padding: 14px; display: grid; gap: 10px; align-content: start; border: 1px solid var(--line); background: var(--surface); border-top: 4px solid var(--qc); }
+.quad .qh { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.quad .qh h3 { color: var(--qc); }
+.q-S { --qc: var(--ok); } .q-W { --qc: var(--warn); } .q-O { --qc: var(--q-o); } .q-T { --qc: var(--crit); }
+.quad .item { border-left-color: var(--qc); }
+.axis-note { font: 500 .68rem/1 var(--f-mono); text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+
+/* TOWS */
+.tows-wrap { overflow-x: auto; }
+.tows { display: grid; grid-template-columns: 170px repeat(2, minmax(280px, 1fr)); gap: 10px; min-width: 740px; }
+.tows .hdr { padding: 12px; border-radius: 8px; background: var(--sunk); font-size: .82rem; display: grid; gap: 4px; align-content: start; }
+.tows .hdr b { font-family: var(--f-display); font-size: 1rem; }
+.tows .hdr ul { margin: 0; padding-left: 16px; color: var(--muted); }
+.tows .cell { border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--surface); display: grid; gap: 8px; align-content: start; }
+.tows .cell .ch { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.tows .cell .ch b { font-family: var(--f-mono); color: var(--accent); }
+.hint { font-size: .8rem; color: var(--muted); background: var(--accent-soft); border-radius: 4px; padding: 6px 8px; }
+.links { display: flex; flex-wrap: wrap; gap: 4px; }
+.picker { display: grid; gap: 4px; max-height: 220px; overflow: auto; padding: 8px; background: var(--sunk); border-radius: var(--r); font-size: .85rem; }
+.picker label { display: flex; gap: 6px; align-items: flex-start; cursor: pointer; }
+.picker .pq { font: 500 .66rem var(--f-mono); color: var(--muted); text-transform: uppercase; letter-spacing: .07em; margin-top: 4px; }
+
+/* Tables */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+th { font: 500 .68rem/1.2 var(--f-mono); text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+td.n, th { white-space: nowrap; }
+td.n { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+
+/* Risk register */
+.risk-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.risk-mit { display: grid; grid-template-columns: 2fr 1fr; gap: 8px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.seg button { border: 0; background: var(--surface); color: var(--muted); padding: 5px 10px; cursor: pointer; font: 500 .8rem var(--f-body); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+
+/* Assessment */
+.q { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; display: grid; gap: 10px; }
+.q-head { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: start; }
+.q-head .qt { font-weight: 600; font-size: .98rem; }
+.q-meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.q-meta select { width: auto; }
+.opts { display: grid; gap: 4px; }
+.opt { display: flex; gap: 10px; align-items: center; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--r); cursor: pointer; font-size: .9rem; }
+.opt:hover { border-color: var(--accent); }
+.opt input { accent-color: var(--accent); margin: 0; }
+.opt .pts { margin-left: auto; font: .74rem var(--f-mono); color: var(--muted); }
+.opt.on { border-color: var(--accent); background: var(--accent-soft); }
+.q.dim-off { opacity: .55; }
+
+.insights { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.insights li { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; font-size: .9rem; }
+.form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; align-items: end; }
+.toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: var(--r); font-size: .85rem; z-index: 20; }
+.example-flag { display: inline-flex; gap: 6px; align-items: center; font-size: .8rem; color: var(--warn); background: var(--warn-bg); padding: 4px 10px; border-radius: 4px; }
+
+@media (max-width: 720px) {
+  .swot { grid-template-columns: 1fr; }
+  .risk-mit { grid-template-columns: 1fr; }
+  .bar-row { grid-template-columns: 90px 1fr 46px; }
+  h2 { font-size: 1.35rem; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <h1>Strategy <span>Workbench</span></h1>
+      <div class="proj" id="projLabel"></div>
+    </div>
+    <nav class="tabs" id="tabs" role="tablist"></nav>
+  </div>
+</header>
+<main class="wrap" id="view"></main>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- Scales & scoring ----------
+  const IMPACT = ["", "Negligible", "Minor", "Moderate", "Major", "Severe"];
+  const LIKELIHOOD = ["", "Rare", "Unlikely", "Possible", "Likely", "Almost certain"];
+  const FEAS = ["", "Very hard", "Hard", "Moderate", "Easy", "Very easy"];
+  const RELEVANCE = {
+    high: { label: "High", w: 1 },
+    medium: { label: "Medium", w: 0.6 },
+    low: { label: "Low", w: 0.3 },
+    none: { label: "Not relevant", w: 0 }
+  };
+  const PEST = {
+    P: { name: "Political", hint: "Government policy, regulation, trade, tax, political stability" },
+    E: { name: "Economic", hint: "Growth, inflation, interest and exchange rates, spending power" },
+    S: { name: "Social", hint: "Demographics, lifestyle, attitudes, culture, skills" },
+    T: { name: "Technological", hint: "Innovation, automation, digital channels, R&D, infrastructure" }
+  };
+  const SWOT = {
+    S: { name: "Strengths", one: "strength", axis: "Internal · helpful" },
+    W: { name: "Weaknesses", one: "weakness", axis: "Internal · harmful" },
+    O: { name: "Opportunities", one: "opportunity", axis: "External · helpful" },
+    T: { name: "Threats", one: "threat", axis: "External · harmful" }
+  };
+  const TOWS = {
+    SO: { name: "SO · Maxi-Maxi", desc: "Use strengths to capture opportunities" },
+    ST: { name: "ST · Maxi-Mini", desc: "Use strengths to counter threats" },
+    WO: { name: "WO · Mini-Maxi", desc: "Fix weaknesses by exploiting opportunities" },
+    WT: { name: "WT · Mini-Mini", desc: "Minimise weaknesses and avoid threats" }
+  };
+  const HORIZON = { short: "0–12 months", medium: "1–3 years", long: "3+ years" };
+  const NATURE = { opportunity: "Opportunity", threat: "Threat", neutral: "Neutral" };
+  const STATUS = ["Proposed", "Approved", "In progress", "Done", "Rejected"];
+  const RISK_CATS = ["Strategic", "Operational", "Financial", "Compliance", "Reputational", "Political", "Economic", "Social", "Technological"];
+
+  const relW = (r) => (RELEVANCE[r] || RELEVANCE.medium).w;
+  function band(score) {
+    if (score >= 17) return { k: "crit", label: "Critical" };
+    if (score >= 10) return { k: "high", label: "High" };
+    if (score >= 5) return { k: "med", label: "Medium" };
+    return { k: "low", label: "Low" };
+  }
+  // PEST priority = impact × likelihood × relevance weight (0–25)
+  const pestScore = (f) => f.impact * f.likelihood * relW(f.relevance);
+  // SWOT weight = impact × relevance weight (0–5)
+  const swotWeight = (s) => s.impact * relW(s.relevance);
+  // Strategic fit = mean weight of linked factors (0–5); strategy score = fit × feasibility (0–25)
+  function stratFit(st) {
+    const linked = st.links.map(findSwot).filter(Boolean);
+    if (!linked.length) return 0;
+    return linked.reduce((a, s) => a + swotWeight(s), 0) / linked.length;
+  }
+  const stratScore = (st) => stratFit(st) * st.feasibility;
+  const riskScore = (r, residual) => residual ? r.rLikelihood * r.rImpact : r.likelihood * r.impact;
+
+  // ---------- State ----------
+  const KEY = "strategy-workbench-v1";
+  const uid = () => Math.random().toString(36).slice(2, 10);
+  let state;
+  const ui = { tab: "overview", heatMode: "inherent", openLinks: new Set(), pestFilter: "all" };
+
+  function blank() {
+    return { project: { name: "", owner: "", date: "", scope: "", example: false }, pest: [], swot: [], tows: [], risks: [], questions: defaultQuestions() };
+  }
+  function q(dimension, text, options, relevance) {
+    return { id: uid(), dimension, text, options, relevance: relevance || "high", answer: null };
+  }
+  function defaultQuestions() {
+    return [
+      q("Strategy", "How clearly is the strategic objective defined?", ["Not defined", "Loosely described", "Documented", "Documented with measurable targets", "Measurable and agreed by leadership"]),
+      q("Market", "How well do you understand the target customers and market?", ["No research", "Anecdotal insight", "Desk research", "Primary research with customers", "Validated by pilot or sales data"]),
+      q("Market", "How strong is your position against the main competitors?", ["Clearly weaker", "Somewhat weaker", "Comparable", "Somewhat stronger", "Clear, defensible advantage"]),
+      q("Finance", "How secure is the funding for this initiative?", ["No funding identified", "Funding sources identified", "Partially committed", "Fully committed", "Committed with contingency reserve"]),
+      q("Operations", "Can current operations and supply chain support the plan?", ["Major gaps", "Significant changes needed", "Some changes needed", "Minor adjustments", "Ready today"], "medium"),
+      q("People", "Do you have the leadership and skills to deliver?", ["Key roles missing", "Gaps in several areas", "Gaps in one area", "Mostly in place", "Fully staffed and experienced"]),
+      q("Compliance", "How well are regulatory and legal requirements understood?", ["Unknown", "Partly identified", "Identified, not assessed", "Assessed with advice", "Assessed and compliance plan in place"], "medium"),
+      q("Technology", "How ready are your systems and data for the change?", ["Not ready", "Major upgrades needed", "Some upgrades needed", "Minor configuration", "Ready today"], "low")
+    ];
+  }
+
+  function sample() {
+    const s = blank();
+    s.project = { name: "Northwind Roasters: entering the German market", owner: "Strategy team", date: "2026-10-21", scope: "Assess whether to open a roastery and wholesale channel in Germany within 24 months.", example: true };
+    const P = (cat, title, notes, impact, likelihood, relevance, horizon, nature) => ({ id: uid(), cat, title, notes, impact, likelihood, relevance, horizon, nature });
+    s.pest = [
+      P("P", "EU deforestation regulation applies to coffee imports", "Due-diligence and traceability for every lot", 4, 5, "high", "short", "threat"),
+      P("P", "Regional grants for food manufacturing in eastern Länder", "Up to 20% capex support", 3, 3, "medium", "medium", "opportunity"),
+      P("E", "Persistently high green-coffee prices", "Arabica futures volatile, margin squeeze", 4, 4, "high", "short", "threat"),
+      P("E", "Weak euro against USD", "Raises import costs priced in dollars", 3, 3, "medium", "short", "threat"),
+      P("S", "Growth of specialty and home-brewing culture", "Specialty share rising in urban centres", 4, 4, "high", "medium", "opportunity"),
+      P("S", "Strong preference for certified sustainable products", "Organic and Fairtrade expected by retailers", 3, 5, "high", "medium", "opportunity"),
+      P("T", "Subscription e-commerce and direct-to-consumer platforms", "Lower cost to reach consumers nationally", 3, 4, "medium", "short", "opportunity"),
+      P("T", "Energy-efficient electric roasters", "Cuts emissions and gas exposure", 2, 3, "low", "long", "neutral")
+    ];
+    const W = (quad, title, notes, impact, relevance, source) => ({ id: uid(), quad, title, notes, impact, relevance, source: source || null });
+    s.swot = [
+      W("S", "Direct-trade relationships with 14 farms", "Full traceability already in place", 5, "high"),
+      W("S", "Award-winning roast profiles", "Two gold medals in 2025", 3, "medium"),
+      W("S", "Profitable home market with spare roasting capacity", "", 4, "high"),
+      W("W", "No German-speaking sales staff", "", 4, "high"),
+      W("W", "Small marketing budget", "€180k per year across all markets", 3, "medium"),
+      W("O", s.pest[4].title, s.pest[4].notes, 4, "high", s.pest[4].id),
+      W("O", s.pest[5].title, s.pest[5].notes, 3, "high", s.pest[5].id),
+      W("T", s.pest[0].title, s.pest[0].notes, 4, "high", s.pest[0].id),
+      W("T", s.pest[2].title, s.pest[2].notes, 4, "high", s.pest[2].id),
+      W("T", "Established local roasters with retail shelf space", "", 3, "medium")
+    ];
+    const sw = (i) => s.swot[i].id;
+    const T = (type, title, notes, links, feasibility, horizon, owner, status) => ({ id: uid(), type, title, notes, links, feasibility, horizon, owner, status });
+    s.tows = [
+      T("SO", "Launch a traceable single-origin subscription for German home brewers", "Lead with farm stories", [sw(0), sw(1), sw(5), sw(6)], 4, "short", "Head of D2C", "Approved"),
+      T("ST", "Market regulation-ready supply chain to wholesale buyers", "Turn compliance into a selling point", [sw(0), sw(7)], 4, "short", "Wholesale lead", "Proposed"),
+      T("WO", "Hire a Berlin-based bilingual sales lead", "", [sw(3), sw(5)], 3, "short", "COO", "In progress"),
+      T("WT", "Partner with an existing German co-packer before building a roastery", "Defers capex until demand is proven", [sw(4), sw(9), sw(8)], 3, "medium", "CFO", "Proposed")
+    ];
+    const R = (title, category, likelihood, impact, mitigation, owner, rLikelihood, rImpact) => ({ id: uid(), title, category, likelihood, impact, mitigation, owner, rLikelihood, rImpact });
+    s.risks = [
+      R("Non-compliance with deforestation regulation", "Compliance", 3, 5, "Geo-locate all farm plots; third-party audit", "Sourcing", 1, 4),
+      R("Green-coffee price spike erodes margin", "Financial", 4, 4, "Forward contracts for 60% of volume", "CFO", 3, 3),
+      R("Slow wholesale uptake in year one", "Strategic", 3, 3, "Start with D2C; pilot 10 cafés", "Wholesale lead", 2, 3),
+      R("Key hire not found within 6 months", "Operational", 3, 4, "", "", 3, 4),
+      R("Currency moves increase landed cost", "Economic", 3, 3, "Hedge EUR/USD quarterly", "Treasury", 2, 2)
+    ];
+    const ans = [3, 2, 3, 2, 3, 1, 3, 2];
+    s.questions.forEach((x, i) => (x.answer = ans[i]));
+    return s;
+  }
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (raw) return normalise(JSON.parse(raw));
+    } catch (e) { /* storage unavailable */ }
+    return sample();
+  }
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* storage unavailable */ }
+    renderHeader();
+  }
+  function normalise(d) {
+    const b = blank();
+    const out = Object.assign(b, d || {});
+    out.project = Object.assign(blank().project, out.project || {});
+    ["pest", "swot", "tows", "risks", "questions"].forEach((k) => { if (!Array.isArray(out[k])) out[k] = []; });
+    out.tows.forEach((t) => { if (!Array.isArray(t.links)) t.links = []; });
+    return out;
+  }
+
+  // ---------- Helpers ----------
+  const $ = (s, el) => (el || document).querySelector(s);
+  const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const fmt = (n, d) => (Math.round(n * Math.pow(10, d || 0)) / Math.pow(10, d || 0)).toFixed(d || 0);
+  const findSwot = (id) => state.swot.find((s) => s.id === id);
+  function toast(msg) {
+    const t = $("#toast");
+    t.textContent = msg; t.hidden = false;
+    clearTimeout(toast.t); toast.t = setTimeout(() => (t.hidden = true), 2200);
+  }
+  function scoreChip(score, max) {
+    const b = band(score * 25 / (max || 25));
+    return `<span class="chip score b-${b.k}" title="${b.label}">${fmt(score, score % 1 ? 1 : 0)} · ${b.label}</span>`;
+  }
+  function attrs(list, id, field, num) {
+    return `data-l="${list}" data-id="${id}" data-f="${field}"${num ? " data-num" : ""}`;
+  }
+  function scaleSelect(list, id, field, scale, value, label) {
+    const opts = scale.map((t, i) => i ? `<option value="${i}"${+value === i ? " selected" : ""}>${i} · ${t}</option>` : "").join("");
+    return `<label class="f"><span>${label}</span><select ${attrs(list, id, field, true)}>${opts}</select></label>`;
+  }
+  function mapSelect(list, id, field, map, value, label) {
+    const opts = Object.keys(map).map((k) => `<option value="${k}"${value === k ? " selected" : ""}>${esc(map[k].label || map[k])}</option>`).join("");
+    return `<label class="f"><span>${label}</span><select ${attrs(list, id, field)}>${opts}</select></label>`;
+  }
+  function arrSelect(list, id, field, arr, value, label) {
+    const opts = arr.map((k) => `<option${value === k ? " selected" : ""}>${esc(k)}</option>`).join("");
+    return `<label class="f"><span>${label}</span><select ${attrs(list, id, field)}>${opts}</select></label>`;
+  }
+  const delBtn = (list, id) => `<button class="btn ghost sm danger" data-act="del" data-l="${list}" data-id="${id}" aria-label="Delete">Delete</button>`;
+
+  // ---------- Tabs ----------
+  const TABS = [
+    ["overview", "", "Overview"],
+    ["assessment", "MC", "Assessment"],
+    ["pest", "PEST", "PEST"],
+    ["swot", "SWOT", "SWOT"],
+    ["tows", "TOWS", "Strategy & TOWS"],
+    ["risks", "RISK", "Risk register"],
+    ["data", "", "Project & data"]
+  ];
+  function renderTabs() {
+    $("#tabs").innerHTML = TABS.map(([k, code, label]) =>
+      `<button role="tab" data-tab="${k}" aria-selected="${ui.tab === k}">${code ? `<span class="code">${code}</span>` : ""}${label}</button>`).join("");
+  }
+  function renderHeader() {
+    const p = state.project;
+    $("#projLabel").textContent = (p.name || "Untitled analysis") + (p.example ? " · example data" : "");
+  }
+
+  // ---------- Overview ----------
+  function assessmentScore(filterDim) {
+    let got = 0, max = 0, answered = 0, total = 0;
+    state.questions.forEach((x) => {
+      if (filterDim && x.dimension !== filterDim) return;
+      const w = relW(x.relevance);
+      if (!w) return;
+      total++;
+      if (x.answer == null) return;
+      answered++;
+      const top = Math.max(1, x.options.length - 1);
+      got += (x.answer / top) * w; max += w;
+    });
+    return { pct: max ? (got / max) * 100 : 0, answered, total };
+  }
+  function readinessBand(pct) {
+    if (pct >= 75) return { k: "low", label: "Ready" };
+    if (pct >= 50) return { k: "med", label: "Partly ready" };
+    if (pct >= 25) return { k: "high", label: "Gaps" };
+    return { k: "crit", label: "Not ready" };
+  }
+
+  function heatMap(mode) {
+    const residual = mode === "residual";
+    const counts = {};
+    const names = {};
+    state.risks.forEach((r) => {
+      const l = residual ? r.rLikelihood : r.likelihood, i = residual ? r.rImpact : r.impact;
+      const k = l + "-" + i;
+      counts[k] = (counts[k] || 0) + 1;
+      (names[k] = names[k] || []).push(r.title);
+    });
+    let h = `<div class="heat-wrap"><div class="heat" role="table" aria-label="Risk heat map, impact by likelihood">`;
+    for (let i = 5; i >= 1; i--) {
+      h += `<div class="ax">${i} ${IMPACT[i]}</div>`;
+      for (let l = 1; l <= 5; l++) {
+        const k = l + "-" + i, c = counts[k] || 0, b = band(l * i);
+        h += `<div class="cell b-${b.k}${c ? "" : " empty"}" title="${esc((names[k] || []).join("\n") || "Score " + l * i)}"><span class="p">${l * i}</span>${c || "·"}</div>`;
+      }
+    }
+    h += `<div></div>` + [1, 2, 3, 4, 5].map((l) => `<div class="ax col">${l}<br>${LIKELIHOOD[l]}</div>`).join("");
+    h += `</div></div><div class="heat-caption"><span>Rows: impact · Columns: likelihood · Number: risks in cell</span><span class="legend">${["low", "med", "high", "crit"].map((k, n) => `<span class="chip b-${k}">${["Low 1–4", "Medium 5–9", "High 10–16", "Critical 17–25"][n]}</span>`).join("")}</span></div>`;
+    return h;
+  }
+
+  function insights() {
+    const out = [];
+    const crit = state.risks.filter((r) => riskScore(r) >= 17);
+    const high = state.risks.filter((r) => riskScore(r) >= 10 && riskScore(r) < 17);
+    if (crit.length) out.push(["crit", `${crit.length} critical risk${crit.length > 1 ? "s" : ""}: ${crit.map((r) => r.title).join("; ")}.`]);
+    if (high.length) out.push(["high", `${high.length} high risk${high.length > 1 ? "s" : ""} need active treatment.`]);
+    const noMit = state.risks.filter((r) => riskScore(r) >= 10 && (!r.mitigation || !r.owner));
+    if (noMit.length) out.push(["high", `${noMit.length} high or critical risk${noMit.length > 1 ? "s have" : " has"} no mitigation or owner: ${noMit.map((r) => r.title).join("; ")}.`]);
+    const topPest = state.pest.slice().sort((a, b) => pestScore(b) - pestScore(a))[0];
+    if (topPest) out.push(["med", `Highest-priority external factor: ${PEST[topPest.cat].name.toLowerCase()} — “${topPest.title}” (${fmt(pestScore(topPest), 1)}/25).`]);
+    const unlinked = state.pest.filter((p) => p.nature !== "neutral" && relW(p.relevance) > 0 && !state.swot.some((s) => s.source === p.id));
+    if (unlinked.length) out.push(["med", `${unlinked.length} relevant PEST opportunit${unlinked.length > 1 ? "ies or threats are" : "y or threat is"} not yet carried into the SWOT.`]);
+    Object.keys(SWOT).forEach((k) => { if (!state.swot.some((s) => s.quad === k)) out.push(["med", `SWOT has no ${SWOT[k].name.toLowerCase()} yet.`]); });
+    Object.keys(TOWS).forEach((k) => { if (!state.tows.some((t) => t.type === k)) out.push(["low", `No ${k} strategy defined in the TOWS matrix.`]); });
+    const a = assessmentScore();
+    if (a.answered < a.total) out.push(["low", `${a.total - a.answered} of ${a.total} relevant assessment questions are unanswered.`]);
+    const dims = [...new Set(state.questions.map((x) => x.dimension))].map((d) => [d, assessmentScore(d)]).filter(([, s]) => s.answered);
+    if (dims.length) {
+      const weak = dims.sort((x, y) => x[1].pct - y[1].pct)[0];
+      if (weak[1].pct < 60) out.push([readinessBand(weak[1].pct).k, `Weakest readiness dimension: ${weak[0]} at ${fmt(weak[1].pct)}%.`]);
+    }
+    if (!out.length) out.push(["low", "No open issues. Every analysis has entries and no high risks are untreated."]);
+    return out;
+  }
+
+  function viewOverview() {
+    const a = assessmentScore(), rb = readinessBand(a.pct);
+    const scores = state.risks.map((r) => riskScore(r));
+    const maxRisk = scores.length ? Math.max(...scores) : 0;
+    const highCount = scores.filter((x) => x >= 10).length;
+    const residualTotal = state.risks.reduce((t, r) => t + riskScore(r, true), 0);
+    const inherentTotal = state.risks.reduce((t, r) => t + riskScore(r), 0);
+    const reduction = inherentTotal ? (1 - residualTotal / inherentTotal) * 100 : 0;
+    const topStrat = state.tows.slice().sort((x, y) => stratScore(y) - stratScore(x))[0];
+
+    const pestSums = Object.keys(PEST).map((k) => [k, state.pest.filter((f) => f.cat === k).reduce((t, f) => t + pestScore(f), 0), state.pest.filter((f) => f.cat === k).length]);
+    const pestMax = Math.max(1, ...pestSums.map((x) => x[1]));
+    const dims = [...new Set(state.questions.map((x) => x.dimension))];
+
+    const topRisks = state.risks.slice().sort((x, y) => riskScore(y) - riskScore(x)).slice(0, 5);
+
+    return `
+    <div class="view-head"><div>
+      <h2>${esc(state.project.name || "Untitled analysis")}</h2>
+      <p>${esc(state.project.scope || "Add a scope under Project & data to frame the analysis.")}</p>
+    </div>${state.project.example ? `<span class="example-flag">Example data. Replace it with your own or clear it under Project & data.</span>` : ""}</div>
+    <div class="stack">
+      <div class="kpis">
+        <div class="kpi"><span class="eyebrow">Readiness</span><span class="v">${fmt(a.pct)}%</span><span class="s"><span class="chip b-${rb.k}">${rb.label}</span> ${a.answered}/${a.total} answered</span></div>
+        <div class="kpi"><span class="eyebrow">Top risk score</span><span class="v">${maxRisk}<span class="muted" style="font-size:1rem">/25</span></span><span class="s">${highCount} high or critical of ${state.risks.length}</span></div>
+        <div class="kpi"><span class="eyebrow">Risk reduction</span><span class="v">${fmt(reduction)}%</span><span class="s">Inherent ${inherentTotal} → residual ${residualTotal}</span></div>
+        <div class="kpi"><span class="eyebrow">Factors</span><span class="v">${state.pest.length + state.swot.length}</span><span class="s">${state.pest.length} PEST · ${state.swot.length} SWOT</span></div>
+        <div class="kpi"><span class="eyebrow">Strategies</span><span class="v">${state.tows.length}</span><span class="s">${topStrat ? "Lead: " + esc(topStrat.type) + " · score " + fmt(stratScore(topStrat), 1) : "None yet"}</span></div>
+      </div>
+      <div class="panel"><h3>Findings</h3>
+        <ul class="insights">${insights().map(([k, t]) => `<li><span class="chip b-${k}">${{ low: "Note", med: "Watch", high: "Act", crit: "Urgent" }[k]}</span><span>${esc(t)}</span></li>`).join("")}</ul>
+      </div>
+      <div class="grid2">
+        <div class="panel"><div class="panel-head"><h3>Risk heat map</h3><div class="seg" role="group" aria-label="Rating basis">
+          <button data-act="heat" data-mode="inherent" aria-pressed="${ui.heatMode === "inherent"}">Inherent</button><button data-act="heat" data-mode="residual" aria-pressed="${ui.heatMode === "residual"}">Residual</button></div></div>
+          ${heatMap(ui.heatMode)}
+        </div>
+        <div class="panel"><h3>Top risks</h3>
+          ${topRisks.length ? `<div class="table-wrap"><table><thead><tr><th>Risk</th><th>L × I</th><th>Rating</th><th>Residual</th></tr></thead><tbody>${topRisks.map((r) =>
+            `<tr><td>${esc(r.title)}</td><td class="n">${r.likelihood} × ${r.impact}</td><td>${scoreChip(riskScore(r))}</td><td>${scoreChip(riskScore(r, true))}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty-state">No risks recorded. Add them in the risk register.</div>`}
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="panel"><h3>PEST pressure by category</h3><p class="muted" style="font-size:.82rem;margin-top:4px">Sum of impact × likelihood × relevance for each category</p>
+          <div class="bars" style="margin-top:14px">${pestSums.map(([k, v, n]) => `<div class="bar-row"><span>${PEST[k].name} <span class="muted">(${n})</span></span><div class="bar-track"><div class="bar-fill" style="width:${(v / pestMax) * 100}%"></div></div><span class="num">${fmt(v, 1)}</span></div>`).join("")}</div>
+        </div>
+        <div class="panel"><h3>Readiness by dimension</h3><p class="muted" style="font-size:.82rem;margin-top:4px">Multiple-choice answers weighted by relevance</p>
+          <div class="bars" style="margin-top:14px">${dims.map((d) => { const s = assessmentScore(d), b = readinessBand(s.pct); return `<div class="bar-row"><span>${esc(d)}</span><div class="bar-track"><div class="bar-fill" style="width:${s.pct}%;background:var(--${{ low: "ok", med: "warn", high: "high", crit: "crit" }[b.k]})"></div></div><span class="num">${s.answered ? fmt(s.pct) + "%" : "–"}</span></div>`; }).join("")}</div>
+        </div>
+      </div>
+      <div class="panel"><h3>SWOT at a glance</h3>
+        <div class="swot" style="margin-top:12px">${Object.keys(SWOT).map((k) => {
+          const items = state.swot.filter((s) => s.quad === k).sort((x, y) => swotWeight(y) - swotWeight(x));
+          return `<div class="quad q-${k}"><div class="qh"><h3>${SWOT[k].name}</h3><span class="axis-note">${SWOT[k].axis}</span></div>${items.length ? `<ul style="margin:0;padding-left:18px">${items.slice(0, 4).map((s) => `<li>${esc(s.title)} <span class="chip">${fmt(swotWeight(s), 1)}</span></li>`).join("")}</ul>` : `<span class="muted">None yet</span>`}</div>`;
+        }).join("")}</div>
+      </div>
+    </div>`;
+  }
+
+  // ---------- Assessment (multiple choice + relevance) ----------
+  function viewAssessment() {
+    const a = assessmentScore(), rb = readinessBand(a.pct);
+    const dims = [...new Set(state.questions.map((x) => x.dimension))];
+    return `
+    <div class="view-head"><div><h2>Readiness assessment</h2>
+      <p>Answer each multiple-choice question and set how relevant it is to this decision. Relevance weights the score: High 1.0, Medium 0.6, Low 0.3, Not relevant excluded.</p></div>
+      <div class="kpi" style="min-width:200px"><span class="eyebrow">Weighted readiness</span><span class="v">${fmt(a.pct)}%</span><span class="s"><span class="chip b-${rb.k}">${rb.label}</span> ${a.answered}/${a.total} answered</span></div>
+    </div>
+    <div class="stack">
+      ${dims.map((d) => `<section class="stack" style="gap:10px"><div class="panel-head" style="margin:0"><h3>${esc(d)}</h3><span class="chip">${(() => { const s = assessmentScore(d); return s.answered ? fmt(s.pct) + "%" : "unanswered"; })()}</span></div>
+        ${state.questions.filter((x) => x.dimension === d).map(questionCard).join("")}</section>`).join("")}
+      <div class="panel"><h3>Add a question</h3>
+        <form id="qForm" class="stack" style="gap:10px;margin-top:12px">
+          <div class="form-row">
+            <label class="f" style="grid-column:1/-1"><span>Question</span><input id="qText" required placeholder="e.g. How dependent are we on a single supplier?"></label>
+            <label class="f"><span>Dimension</span><input id="qDim" list="dimList" placeholder="e.g. Operations" required></label>
+            <label class="f"><span>Relevance</span><select id="qRel">${Object.keys(RELEVANCE).map((k) => `<option value="${k}">${RELEVANCE[k].label}</option>`).join("")}</select></label>
+          </div>
+          <label class="f"><span>Answer options, worst to best, one per line (scored 0, 1, 2…)</span><textarea id="qOpts" rows="4" required placeholder="Fully dependent&#10;Two suppliers&#10;Three or more qualified suppliers"></textarea></label>
+          <datalist id="dimList">${dims.map((d) => `<option value="${esc(d)}">`).join("")}</datalist>
+          <div><button class="btn primary" type="submit">Add question</button></div>
+        </form>
+      </div>
+    </div>`;
+  }
+  function questionCard(x) {
+    const top = Math.max(1, x.options.length - 1);
+    return `<div class="q${relW(x.relevance) ? "" : " dim-off"}">
+      <div class="q-head"><span class="qt">${esc(x.text)}</span>
+        <div class="q-meta"><select ${attrs("questions", x.id, "relevance")} aria-label="Relevance">${Object.keys(RELEVANCE).map((k) => `<option value="${k}"${x.relevance === k ? " selected" : ""}>Relevance: ${RELEVANCE[k].label}</option>`).join("")}</select>${delBtn("questions", x.id)}</div></div>
+      <div class="opts" role="radiogroup">${x.options.map((o, i) => `<label class="opt${x.answer === i ? " on" : ""}"><input type="radio" name="q-${x.id}" value="${i}" ${attrs("questions", x.id, "answer", true)}${x.answer === i ? " checked" : ""}><span>${esc(o)}</span><span class="pts">${i}/${top}</span></label>`).join("")}</div>
+    </div>`;
+  }
+
+  // ---------- PEST ----------
+  function viewPest() {
+    const cats = ui.pestFilter === "all" ? Object.keys(PEST) : [ui.pestFilter];
+    return `
+    <div class="view-head"><div><h2>PEST analysis</h2>
+      <p>Scan the external environment. Rate each factor's impact and likelihood, set its relevance, and mark it as an opportunity or threat. Priority = impact × likelihood × relevance weight, out of 25.</p></div>
+      <div class="seg" role="group" aria-label="Filter category"><button data-act="pestFilter" data-cat="all" aria-pressed="${ui.pestFilter === "all"}">All</button>${Object.keys(PEST).map((k) => `<button data-act="pestFilter" data-cat="${k}" aria-pressed="${ui.pestFilter === k}">${k}</button>`).join("")}</div>
+    </div>
+    <div class="stack">${cats.map((k) => {
+      const items = state.pest.filter((f) => f.cat === k).sort((x, y) => pestScore(y) - pestScore(x));
+      return `<section class="pest-group"><div class="gh"><span class="letter">${k}</span><h3>${PEST[k].name}</h3><span class="muted" style="font-size:.84rem">${PEST[k].hint}</span>
+        <button class="btn sm" style="margin-left:auto" data-act="addPest" data-cat="${k}">Add ${PEST[k].name.toLowerCase()} factor</button></div>
+        <div class="items">${items.length ? items.map(pestItem).join("") : `<div class="empty-state">No ${PEST[k].name.toLowerCase()} factors yet.</div>`}</div></section>`;
+    }).join("")}</div>`;
+  }
+  function pestItem(f) {
+    const sc = pestScore(f), b = band(sc);
+    const inSwot = state.swot.some((s) => s.source === f.id);
+    return `<div class="item s-${b.k}">
+      <div class="item-top"><div style="min-width:0"><input class="title" value="${esc(f.title)}" placeholder="Factor" ${attrs("pest", f.id, "title")}><input class="note" value="${esc(f.notes)}" placeholder="Evidence or notes" ${attrs("pest", f.id, "notes")}></div>${scoreChip(sc)}</div>
+      <div class="item-fields">
+        ${scaleSelect("pest", f.id, "impact", IMPACT, f.impact, "Impact")}
+        ${scaleSelect("pest", f.id, "likelihood", LIKELIHOOD, f.likelihood, "Likelihood")}
+        ${mapSelect("pest", f.id, "relevance", RELEVANCE, f.relevance, "Relevance")}
+        ${mapSelect("pest", f.id, "horizon", HORIZON, f.horizon, "Time horizon")}
+        ${mapSelect("pest", f.id, "nature", NATURE, f.nature, "Effect")}
+      </div>
+      <div class="item-actions">
+        ${f.nature !== "neutral" ? (inSwot ? `<span class="chip">In SWOT as ${f.nature === "threat" ? "threat" : "opportunity"}</span>` : `<button class="btn sm" data-act="toSwot" data-id="${f.id}">Add to SWOT as ${f.nature}</button>`) : ""}
+        ${f.nature === "threat" ? (state.risks.some((r) => r.source === f.id) ? `<span class="chip">In risk register</span>` : `<button class="btn sm" data-act="toRisk" data-l="pest" data-id="${f.id}">Add to risk register</button>`) : ""}
+        <span style="margin-left:auto"></span>${delBtn("pest", f.id)}
+      </div>
+    </div>`;
+  }
+
+  // ---------- SWOT ----------
+  function viewSwot() {
+    return `
+    <div class="view-head"><div><h2>SWOT analysis</h2>
+      <p>Strengths and weaknesses are internal; opportunities and threats come from outside, usually from the PEST scan. Weight = impact × relevance weight, out of 5. Items are sorted by weight and feed the TOWS matrix.</p></div></div>
+    <div class="swot">${Object.keys(SWOT).map((k) => {
+      const items = state.swot.filter((s) => s.quad === k).sort((x, y) => swotWeight(y) - swotWeight(x));
+      return `<section class="quad q-${k}"><div class="qh"><h3>${SWOT[k].name}</h3><span class="axis-note">${SWOT[k].axis}</span></div>
+        <div class="items">${items.length ? items.map(swotItem).join("") : `<div class="empty-state">None yet.</div>`}</div>
+        <div><button class="btn sm" data-act="addSwot" data-quad="${k}">Add ${SWOT[k].one}</button></div></section>`;
+    }).join("")}</div>`;
+  }
+  function swotItem(s) {
+    const w = swotWeight(s);
+    const src = s.source && state.pest.find((p) => p.id === s.source);
+    const harmful = s.quad === "W" || s.quad === "T";
+    return `<div class="item">
+      <div class="item-top"><div style="min-width:0"><input class="title" value="${esc(s.title)}" placeholder="Item" ${attrs("swot", s.id, "title")}><input class="note" value="${esc(s.notes)}" placeholder="Evidence or notes" ${attrs("swot", s.id, "notes")}></div><span class="chip score b-${band(w * 5).k}">${fmt(w, 1)} / 5</span></div>
+      <div class="item-fields">${scaleSelect("swot", s.id, "impact", IMPACT, s.impact, "Impact")}${mapSelect("swot", s.id, "relevance", RELEVANCE, s.relevance, "Relevance")}</div>
+      <div class="item-actions">${src ? `<span class="chip">From PEST · ${PEST[src.cat].name}</span>` : ""}
+        ${harmful ? (state.risks.some((r) => r.source === s.id || (src && r.source === src.id)) ? `<span class="chip">In risk register</span>` : `<button class="btn sm" data-act="toRisk" data-l="swot" data-id="${s.id}">Add to risk register</button>`) : ""}
+        <span style="margin-left:auto"></span>${delBtn("swot", s.id)}</div>
+    </div>`;
+  }
+
+  // ---------- TOWS & strategy ----------
+  function topOf(quad, n) {
+    return state.swot.filter((s) => s.quad === quad).sort((x, y) => swotWeight(y) - swotWeight(x)).slice(0, n);
+  }
+  function viewTows() {
+    const hdr = (k) => `<div class="hdr"><b style="color:var(--${{ S: "ok", W: "warn", O: "q-o", T: "crit" }[k]})">${SWOT[k].name}</b>${topOf(k, 3).length ? `<ul>${topOf(k, 3).map((s) => `<li>${esc(s.title)}</li>`).join("")}</ul>` : `<span class="muted">Add ${SWOT[k].name.toLowerCase()} in SWOT</span>`}</div>`;
+    const ranked = state.tows.slice().sort((x, y) => stratScore(y) - stratScore(x));
+    return `
+    <div class="view-head"><div><h2>Strategy & TOWS</h2>
+      <p>Pair internal factors with external ones to generate strategic options. Link each strategy to the SWOT items it draws on: strategic fit is the mean weight of those links. Strategy score = fit × feasibility, out of 25.</p></div></div>
+    <div class="stack">
+      <div class="tows-wrap"><div class="tows">
+        <div class="hdr" style="background:none;align-content:end"><span class="axis-note">Internal ↓ · External →</span></div>
+        ${hdr("O")}${hdr("T")}
+        ${hdr("S")}${towsCell("SO")}${towsCell("ST")}
+        ${hdr("W")}${towsCell("WO")}${towsCell("WT")}
+      </div></div>
+      <div class="panel"><h3>Strategic options ranked</h3>
+        ${ranked.length ? `<div class="table-wrap"><table><thead><tr><th>#</th><th>Strategy</th><th>Type</th><th>Links</th><th>Fit</th><th>Feasibility</th><th>Score</th><th>Horizon</th><th>Owner</th><th>Status</th></tr></thead><tbody>
+          ${ranked.map((t, i) => `<tr><td class="n">${i + 1}</td><td>${esc(t.title || "Untitled")}</td><td class="n">${t.type}</td><td class="n">${t.links.length}</td><td class="n">${fmt(stratFit(t), 1)}</td><td class="n">${t.feasibility}</td><td>${(() => { const sc = stratScore(t), b = band(sc); return `<span class="chip score ${({ crit: "b-low", high: "b-low", med: "b-med", low: "b-high" })[b.k]}">${fmt(sc, 1)}</span>`; })()}</td><td>${HORIZON[t.horizon] || ""}</td><td>${esc(t.owner)}</td><td>${esc(t.status)}</td></tr>`).join("")}
+        </tbody></table></div>` : `<div class="empty-state">No strategies yet. Add one in any TOWS cell.</div>`}
+      </div>
+    </div>`;
+  }
+  function towsCell(type) {
+    const [iq, eq] = type.split("");
+    const items = state.tows.filter((t) => t.type === type);
+    const a = topOf(iq, 1)[0], b = topOf(eq, 1)[0];
+    return `<div class="cell"><div class="ch"><b>${TOWS[type].name}</b><button class="btn sm" data-act="addTows" data-type="${type}">Add</button></div>
+      <span class="muted" style="font-size:.82rem">${TOWS[type].desc}</span>
+      ${a && b ? `<div class="hint">Strongest pairing: <b>${esc(a.title)}</b> × <b>${esc(b.title)}</b></div>` : ""}
+      ${items.map(towsItem).join("")}</div>`;
+  }
+  function towsItem(t) {
+    const [iq, eq] = t.type.split("");
+    const linked = t.links.map(findSwot).filter(Boolean);
+    const open = ui.openLinks.has(t.id);
+    const pickable = state.swot.filter((s) => s.quad === iq || s.quad === eq);
+    return `<div class="item">
+      <div class="item-top"><div style="min-width:0"><input class="title" value="${esc(t.title)}" placeholder="Strategy" ${attrs("tows", t.id, "title")}><input class="note" value="${esc(t.notes)}" placeholder="Rationale" ${attrs("tows", t.id, "notes")}></div><span class="chip score">${fmt(stratScore(t), 1)}</span></div>
+      <div class="links">${linked.map((s) => `<span class="chip" title="${SWOT[s.quad].name}">${s.quad} · ${esc(s.title.length > 34 ? s.title.slice(0, 32) + "…" : s.title)}</span>`).join("") || `<span class="muted" style="font-size:.82rem">No linked factors</span>`}
+        <button class="btn ghost sm" data-act="links" data-id="${t.id}" aria-expanded="${open}">${open ? "Done" : "Link factors"}</button></div>
+      ${open ? `<div class="picker">${[iq, eq].map((qk) => `<span class="pq">${SWOT[qk].name}</span>${pickable.filter((s) => s.quad === qk).map((s) => `<label><input type="checkbox" data-link="${t.id}" value="${s.id}"${t.links.includes(s.id) ? " checked" : ""}><span>${esc(s.title)}</span></label>`).join("") || `<span class="muted">None</span>`}`).join("")}</div>` : ""}
+      <div class="item-fields">
+        ${scaleSelect("tows", t.id, "feasibility", FEAS, t.feasibility, "Feasibility")}
+        ${mapSelect("tows", t.id, "horizon", HORIZON, t.horizon, "Horizon")}
+        ${arrSelect("tows", t.id, "status", STATUS, t.status, "Status")}
+        <label class="f"><span>Owner</span><input value="${esc(t.owner)}" ${attrs("tows", t.id, "owner")}></label>
+      </div>
+      <div class="item-actions"><span style="margin-left:auto"></span>${delBtn("tows", t.id)}</div>
+    </div>`;
+  }
+
+  // ---------- Risk register ----------
+  function viewRisks() {
+    const sorted = state.risks.slice().sort((x, y) => riskScore(y) - riskScore(x));
+    return `
+    <div class="view-head"><div><h2>Risk register</h2>
+      <p>Risk rating = likelihood × impact on a 5 × 5 matrix. Rate each risk before controls (inherent), record the mitigation, then rate it again after (residual).</p></div>
+      <button class="btn primary" data-act="addRisk">Add risk</button></div>
+    <div class="stack">
+      <div class="panel"><div class="panel-head"><h3>Heat map</h3><div class="seg" role="group" aria-label="Rating basis">
+        <button data-act="heat" data-mode="inherent" aria-pressed="${ui.heatMode === "inherent"}">Inherent</button><button data-act="heat" data-mode="residual" aria-pressed="${ui.heatMode === "residual"}">Residual</button></div></div>
+        ${heatMap(ui.heatMode)}</div>
+      <div class="items">${sorted.length ? sorted.map(riskItem).join("") : `<div class="empty-state">No risks yet. Add one here, or send threats and weaknesses from PEST and SWOT.</div>`}</div>
+    </div>`;
+  }
+  function riskItem(r) {
+    const inh = riskScore(r), res = riskScore(r, true);
+    return `<div class="item s-${band(inh).k}">
+      <div class="item-top"><input class="title" value="${esc(r.title)}" placeholder="Risk description" ${attrs("risks", r.id, "title")}>
+        <div class="item-actions"><span class="eyebrow">Inherent</span>${scoreChip(inh)}<span class="eyebrow">Residual</span>${scoreChip(res)}</div></div>
+      <div class="risk-fields">
+        ${arrSelect("risks", r.id, "category", RISK_CATS, r.category, "Category")}
+        ${scaleSelect("risks", r.id, "likelihood", LIKELIHOOD, r.likelihood, "Likelihood")}
+        ${scaleSelect("risks", r.id, "impact", IMPACT, r.impact, "Impact")}
+        ${scaleSelect("risks", r.id, "rLikelihood", LIKELIHOOD, r.rLikelihood, "Residual likelihood")}
+        ${scaleSelect("risks", r.id, "rImpact", IMPACT, r.rImpact, "Residual impact")}
+      </div>
+      <div class="risk-mit">
+        <label class="f"><span>Mitigation</span><input value="${esc(r.mitigation)}" placeholder="Controls or actions" ${attrs("risks", r.id, "mitigation")}></label>
+        <label class="f"><span>Owner</span><input value="${esc(r.owner)}" placeholder="Who is accountable" ${attrs("risks", r.id, "owner")}></label>
+      </div>
+      <div class="item-actions"><span style="margin-left:auto"></span>${delBtn("risks", r.id)}</div>
+    </div>`;
+  }
+
+  // ---------- Project & data ----------
+  function viewData() {
+    const p = state.project;
+    return `
+    <div class="view-head"><div><h2>Project & data</h2><p>Your work saves automatically in this browser. Export a JSON copy to back it up or move it to another device.</p></div></div>
+    <div class="stack">
+      <div class="panel"><h3>Project</h3>
+        <div class="form-row" style="margin-top:12px">
+          <label class="f" style="grid-column:1/-1"><span>Name</span><input id="p-name" value="${esc(p.name)}" ${attrs("project", "", "name")}></label>
+          <label class="f"><span>Owner</span><input id="p-owner" value="${esc(p.owner)}" ${attrs("project", "", "owner")}></label>
+          <label class="f"><span>Date</span><input id="p-date" type="date" value="${esc(p.date)}" ${attrs("project", "", "date")}></label>
+          <label class="f" style="grid-column:1/-1"><span>Scope and decision</span><textarea id="p-scope" rows="2" ${attrs("project", "", "scope")}>${esc(p.scope)}</textarea></label>
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="panel"><h3>Export</h3><p class="muted" style="margin-top:4px">Copy the JSON, or download it as a file where your browser allows.</p>
+          <textarea id="exportBox" rows="8" readonly class="mono" style="margin-top:10px;font-size:.75rem">${esc(JSON.stringify(state, null, 2))}</textarea>
+          <div class="item-actions" style="margin-top:10px"><button class="btn primary" data-act="copy">Copy JSON</button><button class="btn" data-act="download">Download .json</button><button class="btn" data-act="copyReport">Copy summary report</button></div>
+        </div>
+        <div class="panel"><h3>Import</h3><p class="muted" style="margin-top:4px">Paste exported JSON or choose a file. Importing replaces the current analysis.</p>
+          <textarea id="importBox" rows="6" class="mono" style="margin-top:10px;font-size:.75rem" placeholder='{"project": {...}, "pest": [...]}'></textarea>
+          <div class="item-actions" style="margin-top:10px"><button class="btn primary" data-act="import">Import pasted JSON</button><label class="btn">Choose file<input id="importFile" type="file" accept="application/json,.json" hidden></label></div>
+        </div>
+      </div>
+      <div class="panel"><h3>Start over</h3><p class="muted" style="margin-top:4px">Load the coffee-roaster example, or clear everything and start a blank analysis with the default assessment questions.</p>
+        <div class="item-actions" style="margin-top:10px"><button class="btn" data-act="sample">Load example</button><button class="btn danger" data-act="clear">Clear all data</button></div>
+      </div>
+    </div>`;
+  }
+
+  function report() {
+    const L = [];
+    const p = state.project, a = assessmentScore();
+    L.push(`# ${p.name || "Untitled analysis"}`);
+    if (p.owner || p.date) L.push(`${p.owner || ""}${p.owner && p.date ? " · " : ""}${p.date || ""}`);
+    if (p.scope) L.push("", p.scope);
+    L.push("", `## Readiness: ${fmt(a.pct)}% (${readinessBand(a.pct).label})`);
+    L.push("", "## PEST");
+    Object.keys(PEST).forEach((k) => state.pest.filter((f) => f.cat === k).sort((x, y) => pestScore(y) - pestScore(x)).forEach((f) =>
+      L.push(`- [${k}] ${f.title}: impact ${f.impact}, likelihood ${f.likelihood}, relevance ${RELEVANCE[f.relevance].label}, ${NATURE[f.nature]}, priority ${fmt(pestScore(f), 1)}/25`)));
+    L.push("", "## SWOT");
+    Object.keys(SWOT).forEach((k) => { L.push(`### ${SWOT[k].name}`); topOf(k, 99).forEach((s) => L.push(`- ${s.title} (weight ${fmt(swotWeight(s), 1)}/5)`)); });
+    L.push("", "## Strategic options (TOWS)");
+    state.tows.slice().sort((x, y) => stratScore(y) - stratScore(x)).forEach((t, i) => L.push(`${i + 1}. [${t.type}] ${t.title}: score ${fmt(stratScore(t), 1)}/25, ${t.status}${t.owner ? ", owner " + t.owner : ""}`));
+    L.push("", "## Risks");
+    state.risks.slice().sort((x, y) => riskScore(y) - riskScore(x)).forEach((r) => L.push(`- ${r.title}: ${r.likelihood}×${r.impact} = ${riskScore(r)} (${band(riskScore(r)).label}) → residual ${riskScore(r, true)}${r.mitigation ? "; mitigation: " + r.mitigation : ""}`));
+    L.push("", "## Findings");
+    insights().forEach(([, t]) => L.push(`- ${t}`));
+    return L.join("\n");
+  }
+
+  // ---------- Render ----------
+  const VIEWS = { overview: viewOverview, assessment: viewAssessment, pest: viewPest, swot: viewSwot, tows: viewTows, risks: viewRisks, data: viewData };
+  function render() {
+    renderTabs();
+    renderHeader();
+    const y = window.scrollY;
+    $("#view").innerHTML = VIEWS[ui.tab]();
+    window.scrollTo(0, y);
+  }
+  function go(tab) {
+    if (!VIEWS[tab]) return;
+    ui.tab = tab;
+    try { history.replaceState(null, "", "#" + tab); } catch (e) { /* ignore */ }
+    render();
+    window.scrollTo(0, 0);
+  }
+
+  // ---------- Events ----------
+  function setField(t) {
+    const l = t.dataset.l, f = t.dataset.f;
+    let v = t.value;
+    if ("num" in t.dataset) v = Number(v);
+    if (l === "project") { state.project[f] = v; return; }
+    const item = state[l].find((x) => x.id === t.dataset.id);
+    if (item) item[f] = v;
+  }
+  document.addEventListener("input", (e) => {
+    const t = e.target;
+    if (t.dataset.f && t.tagName !== "SELECT" && t.type !== "radio") { setField(t); save(); }
+  });
+  document.addEventListener("change", (e) => {
+    const t = e.target;
+    if (t.dataset.link) {
+      const st = state.tows.find((x) => x.id === t.dataset.link);
+      if (st) { st.links = t.checked ? [...new Set([...st.links, t.value])] : st.links.filter((x) => x !== t.value); }
+      save(); render(); return;
+    }
+    if (t.id === "importFile" && t.files && t.files[0]) {
+      const r = new FileReader();
+      r.onload = () => importJson(r.result);
+      r.readAsText(t.files[0]);
+      return;
+    }
+    if (t.dataset.f && (t.tagName === "SELECT" || t.type === "radio")) { setField(t); save(); render(); }
+  });
+  function importJson(text) {
+    try {
+      const d = JSON.parse(text);
+      if (!d || typeof d !== "object" || !d.project) throw new Error("missing project");
+      state = normalise(d); save(); render(); toast("Analysis imported");
+    } catch (err) { toast("That isn't an exported analysis. Check the JSON and try again."); }
+  }
+
+  document.addEventListener("submit", (e) => {
+    if (e.target.id !== "qForm") return;
+    e.preventDefault();
+    const opts = $("#qOpts").value.split("\n").map((x) => x.trim()).filter(Boolean);
+    if (opts.length < 2) { toast("Give at least two answer options"); return; }
+    state.questions.push({ id: uid(), dimension: $("#qDim").value.trim() || "General", text: $("#qText").value.trim(), options: opts, relevance: $("#qRel").value, answer: null });
+    save(); render(); toast("Question added");
+  });
+
+  document.addEventListener("click", (e) => {
+    const tab = e.target.closest("[data-tab]");
+    if (tab) { go(tab.dataset.tab); return; }
+    const b = e.target.closest("[data-act]");
+    if (!b) return;
+    const act = b.dataset.act, id = b.dataset.id;
+    switch (act) {
+      case "heat": ui.heatMode = b.dataset.mode; render(); break;
+      case "pestFilter": ui.pestFilter = b.dataset.cat; render(); break;
+      case "addPest":
+        state.pest.push({ id: uid(), cat: b.dataset.cat, title: "", notes: "", impact: 3, likelihood: 3, relevance: "medium", horizon: "medium", nature: "neutral" });
+        save(); render(); focusLast(); break;
+      case "addSwot":
+        state.swot.push({ id: uid(), quad: b.dataset.quad, title: "", notes: "", impact: 3, relevance: "medium", source: null });
+        save(); render(); focusLast(); break;
+      case "addTows":
+        state.tows.push({ id: uid(), type: b.dataset.type, title: "", notes: "", links: [], feasibility: 3, horizon: "medium", owner: "", status: "Proposed" });
+        ui.openLinks.add(state.tows[state.tows.length - 1].id);
+        save(); render(); focusLast(); break;
+      case "addRisk": {
+        const r = { id: uid(), title: "", category: "Strategic", likelihood: 3, impact: 3, mitigation: "", owner: "", rLikelihood: 3, rImpact: 3 };
+        state.risks.push(r); save(); render(); focusId(r.id); break;
+      }
+      case "links": ui.openLinks.has(id) ? ui.openLinks.delete(id) : ui.openLinks.add(id); render(); break;
+      case "toSwot": {
+        const f = state.pest.find((x) => x.id === id);
+        if (!f) break;
+        state.swot.push({ id: uid(), quad: f.nature === "threat" ? "T" : "O", title: f.title, notes: f.notes, impact: f.impact, relevance: f.relevance, source: f.id });
+        save(); render(); toast(`Added to SWOT ${f.nature === "threat" ? "threats" : "opportunities"}`); break;
+      }
+      case "toRisk": {
+        const src = state[b.dataset.l].find((x) => x.id === id);
+        if (!src) break;
+        const lik = src.likelihood || 3;
+        const cat = b.dataset.l === "pest" ? PEST[src.cat].name : (src.quad === "W" ? "Operational" : "Strategic");
+        state.risks.push({ id: uid(), title: src.title, category: cat, likelihood: lik, impact: src.impact, mitigation: "", owner: "", rLikelihood: lik, rImpact: src.impact, source: src.id });
+        save(); render(); toast("Added to risk register"); break;
+      }
+      case "del":
+        if (!b.dataset.armed) {
+          b.dataset.armed = "1"; b.textContent = "Confirm delete";
+          setTimeout(() => { if (b.isConnected) { delete b.dataset.armed; b.textContent = "Delete"; } }, 3000);
+          break;
+        }
+        state[b.dataset.l] = state[b.dataset.l].filter((x) => x.id !== id);
+        if (b.dataset.l === "swot") state.tows.forEach((t) => (t.links = t.links.filter((x) => x !== id)));
+        if (b.dataset.l === "pest") state.swot.forEach((s) => { if (s.source === id) s.source = null; });
+        save(); render(); toast("Deleted"); break;
+      case "copy": copyText(JSON.stringify(state, null, 2), $("#exportBox"), "JSON copied"); break;
+      case "copyReport": copyText(report(), null, "Summary report copied as Markdown"); break;
+      case "download": {
+        const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = (state.project.name || "analysis").replace(/[^\w-]+/g, "-").toLowerCase() + ".json";
+        document.body.appendChild(a); a.click(); a.remove();
+        toast("If no download started, use Copy JSON instead"); break;
+      }
+      case "import": importJson($("#importBox").value); break;
+      case "sample": state = sample(); save(); render(); toast("Example loaded"); break;
+      case "clear":
+        if (!b.dataset.armed) {
+          b.dataset.armed = "1"; b.textContent = "Confirm: clear everything";
+          setTimeout(() => { if (b.isConnected) { delete b.dataset.armed; b.textContent = "Clear all data"; } }, 3000);
+          break;
+        }
+        state = blank(); save(); render(); toast("All data cleared"); break;
+    }
+  });
+  function copyText(text, fallbackEl, msg) {
+    const done = () => toast(msg);
+    const fail = () => {
+      if (fallbackEl) { fallbackEl.focus(); fallbackEl.select(); toast("Press Ctrl+C or ⌘C to copy the selected text"); }
+      else { const ta = $("#exportBox"); if (ta) { ta.value = text; ta.focus(); ta.select(); toast("Report placed in the export box; copy it from there"); } }
+    };
+    try { navigator.clipboard.writeText(text).then(done, fail); } catch (e) { fail(); }
+  }
+  function focusLast() {
+    const all = document.querySelectorAll('input.title');
+    // new items have empty titles; focus the first empty one
+    const empty = [...all].find((i) => !i.value);
+    if (empty) { empty.focus(); empty.scrollIntoView({ block: "center" }); }
+  }
+  function focusId(id) {
+    const el = document.querySelector(`input.title[data-id="${id}"]`);
+    if (el) { el.focus(); el.scrollIntoView({ block: "center" }); }
+  }
+
+  // ---------- Boot ----------
+  state = load();
+  const h = (location.hash || "").slice(1);
+  if (VIEWS[h]) ui.tab = h;
+  render();
+})();
+</script>
+</body>
+</html>
